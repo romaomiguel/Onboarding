@@ -1,0 +1,87 @@
+# Vai para seu-usuario/k8s-manifests em onboarding/deployment.yaml (o Argo CD sincroniza).
+# Pré-requisitos (manual operacional, passo 4): Role, Database e Secret 'onboarding-db-creds' — ver database.md.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: onboarding
+  namespace: apps
+spec:
+  replicas: 2
+  strategy:
+    rollingUpdate: { maxSurge: 1, maxUnavailable: 0 }
+  selector:
+    matchLabels: { app: onboarding }
+  template:
+    metadata:
+      labels: { app: onboarding }
+    spec:
+      imagePullSecrets:
+        - name: ghcr-pull-secret
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                topologyKey: kubernetes.io/hostname
+                labelSelector:
+                  matchLabels: { app: onboarding }
+      containers:
+        - name: onboarding
+          image: ghcr.io/seu-usuario/onboarding:latest # o workflow troca a tag
+          ports:
+            - containerPort: 3000
+          env:
+            - name: TZ
+              value: America/Cuiaba
+          envFrom:
+            - secretRef:
+                name: onboarding-db-creds # DATABASE_URL
+            - secretRef:
+                name: onboarding-admin # ADMIN_PASSWORD (senha inicial do usuário "admin")
+            - secretRef:
+                name: onboarding-cnpj-apis # NEXTAPI_API_KEY e SINTEGRA_API_KEY (fallbacks da consulta de CNPJ)
+                optional: true # sem o Secret o sistema segue só com o OpenCNPJ
+          readinessProbe:
+            httpGet: { path: /readyz, port: 3000 }
+            periodSeconds: 10
+          livenessProbe:
+            httpGet: { path: /healthz, port: 3000 }
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          resources:
+            requests: { cpu: 50m, memory: 128Mi }
+            limits: { memory: 384Mi }
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: onboarding
+  namespace: apps
+spec:
+  selector: { app: onboarding }
+  ports:
+    - port: 80
+      targetPort: 3000
+---
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: onboarding
+  namespace: apps
+  annotations:
+    traefik.ingress.kubernetes.io/router.entrypoints: websecure
+    traefik.ingress.kubernetes.io/router.tls: "true"
+spec:
+  ingressClassName: traefik
+  tls:
+    - hosts: [onboarding.exemplo.local]
+  rules:
+    - host: onboarding.exemplo.local
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service:
+                name: onboarding
+                port: { number: 80 }

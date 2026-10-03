@@ -1,0 +1,37 @@
+{
+  "manifest_version": 3,
+  "name": "Onboarding - Consulta Receita",
+  "version": "1.1.0",
+  "description": "Captura o cartão CNPJ e o QSA da Receita Federal e envia ao sistema de onboarding.",
+  "permissions": [
+    "storage"
+  ],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://solucoes.receita.fazenda.gov.br/Servicos/cnpjreva/*"
+      ],
+      "js": [
+        "receita.js"
+      ],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "*://onboarding.exemplo.local/*",
+        "http://localhost/*",
+        "http://127.0.0.1/*"
+      ],
+      "js": [
+        "app.js"
+      ],
+      "run_at": "document_start"
+    }
+  ],
+  "action": {
+    "default_title": "Onboarding - Consulta Receita"
+  }
+}
