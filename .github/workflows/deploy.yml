@@ -1,0 +1,33 @@
+name: deploy
+on:
+  # Versão pública: o deploy só roda manualmente (exige os secrets e o cluster do autor).
+  workflow_dispatch:
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ghcr.io/seu-usuario/onboarding:${{ github.sha }}
+      - name: Atualiza a tag no k8s-manifests
+        env:
+          TOKEN: ${{ secrets.MANIFESTS_REPO_TOKEN }}
+        run: |
+          git clone https://x-access-token:${TOKEN}@github.com/seu-usuario/k8s-manifests.git m
+          cp k8s/deployment.yaml m/onboarding/deployment.yaml
+          sed -i "s#ghcr.io/seu-usuario/onboarding:.*#ghcr.io/seu-usuario/onboarding:${GITHUB_SHA}#" m/onboarding/deployment.yaml
+          cd m
+          git config user.name "github-actions"; git config user.email "actions@github.com"
+          git add -A; git diff --cached --quiet || git commit -m "onboarding: ${GITHUB_SHA::7}"
+          git push
